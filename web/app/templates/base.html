@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MediaBridge{% block title %}{% endblock %}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif; color: #222; margin: 0;
+      display: flex; min-height: 100vh;
+    }
+    nav.sidebar {
+      width: 200px; flex-shrink: 0; background: #1e293b; color: #e2e8f0;
+      padding: 1.5rem 0; display: flex; flex-direction: column;
+    }
+    nav.sidebar h2 { font-size: 1.1rem; margin: 0 0 1.5rem; padding: 0 1.25rem; }
+    nav.sidebar a {
+      display: block; padding: 0.6rem 1.25rem; color: #cbd5e1; text-decoration: none;
+    }
+    nav.sidebar a:hover { background: #334155; }
+    nav.sidebar a.active { background: #2563eb; color: white; font-weight: 600; }
+    nav.sidebar .user-box {
+      margin-top: auto; padding: 1rem 1.25rem 0; border-top: 1px solid #334155;
+    }
+    nav.sidebar .user-box .username { display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.4rem; }
+    nav.sidebar .user-box button {
+      background: none; border: 1px solid #475569; color: #cbd5e1; border-radius: 4px;
+      padding: 0.3rem 0.6rem; font-size: 0.85rem; cursor: pointer; width: 100%;
+    }
+    nav.sidebar .user-box button:hover { background: #334155; }
+    main { flex: 1; padding: 2rem; min-width: 0; }
+    h1 { margin-bottom: 0.25rem; }
+    .meta { color: #666; margin-bottom: 1rem; }
+    form.toolbar { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    input, select, button { padding: 0.4rem 0.6rem; font-size: 1rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ddd; }
+    th { background: #f5f5f5; }
+    code { font-size: 0.85rem; }
+    .scan-btn { background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .danger-btn { background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    dl.settings dt { font-weight: 600; margin-top: 0.75rem; }
+    dl.settings dd { margin: 0.15rem 0 0; color: #333; }
+    .error-banner { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 0.6rem 1rem; border-radius: 4px; margin-bottom: 1rem; }
+    .success-banner { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; padding: 0.6rem 1rem; border-radius: 4px; margin-bottom: 1rem; }
+    .warn { color: #b45309; font-size: 0.8rem; margin-left: 0.4rem; }
+    .status-pill { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+    .status-pending { background: #f1f5f9; color: #475569; }
+    .status-running { background: #eff6ff; color: #1d4ed8; }
+    .status-done { background: #f0fdf4; color: #15803d; }
+    .status-failed { background: #fef2f2; color: #b91c1c; }
+    progress { width: 100%; height: 0.6rem; }
+    .mini-btn {
+      padding: 0.15rem 0.5rem; font-size: 0.8rem; border: 1px solid #cbd5e1; border-radius: 4px;
+      background: white; cursor: pointer;
+    }
+    .mini-btn:hover:not(:disabled) { background: #f1f5f9; }
+    .mini-btn:disabled { color: #ccc; border-color: #eee; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <nav class="sidebar">
+    <h2>MediaBridge</h2>
+    <a href="/" class="{% if active == 'catalog' %}active{% endif %}">Catalog</a>
+    <a href="/copy-jobs" class="{% if active == 'copy_jobs' %}active{% endif %}">Copy Jobs</a>
+    <a href="/settings" class="{% if active == 'settings' %}active{% endif %}">Settings</a>
+    {% if username %}
+    <div class="user-box">
+      <span class="username">Logged in as {{ username }}</span>
+      <form method="post" action="/logout">
+        <button type="submit">Log out</button>
+      </form>
+    </div>
+    {% endif %}
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

@@ -1,0 +1,94 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8765:8000"
+    volumes:
+      - /mnt/homedrive/mediafiles:/mediafiles:ro
+      - ./data/backup:/data/backup:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+# WORKFLOW MANAGEMENT
+  # Shares the ./worker image (same Celery app/tasks/DB models) rather than a
+  # separate ./celery build - it just consumes the "default" queue instead of
+  # "copy", so lightweight background work doesn't queue behind file copies.
+  celery:
+    build: ./worker
+    command: ["celery", "-A", "app.celery_app", "worker", "-Q", "default", "-n", "celery@%h", "--loglevel=info"]
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  worker:
+    build: ./worker
+    command: ["celery", "-A", "app.celery_app", "worker", "-Q", "copy", "-n", "worker@%h", "--loglevel=info"]
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - /mnt/homedrive/mediafiles:/mediafiles:rw
+      - ./data/backup:/data/backup:rw
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  flower:
+    build: ./flower
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "5555:5555"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  #terminator service has the power to manage docker containers, create start and stop them, and also has the ability to manage docker networks. It is a powerful tool that can be used to automate the management of docker containers and networks. It can be controlled through an internal rest api supported by fastapi (only available on this network). This way, containers can be indirectly managed through terminator without all services needing access to the docker socket. This is a security measure to prevent unauthorized access to the docker socket.
+  # No host port published - reachable only from other containers on this compose network.
+  # Its API is further restricted to an allowlist of services (celery, worker) and requires
+  # TERMINATOR_API_KEY, since anything with access to the docker socket has host-level power.
+  terminator:
+    build: ./terminator
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  db_data:

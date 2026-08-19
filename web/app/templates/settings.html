@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %} - Settings{% endblock %}
+{% block content %}
+  <h1>Settings</h1>
+
+  {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+  {% if flash_status == 'ok' %}<p class="success-banner">{{ flash_message }}</p>{% endif %}
+  {% if flash_status == 'error' %}<p class="error-banner">{{ flash_message }}</p>{% endif %}
+
+  <h2>Storage locations</h2>
+  <p class="meta">Local folders to scan for media. Paths must be reachable inside the web container (currently everything under <code>/mediafiles</code>).</p>
+
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Type</th><th>Path</th><th></th><th>Backup target</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for entry in storage_locations %}
+      <tr>
+        <td><input type="text" name="name" form="edit-loc-{{ entry.location.id }}" value="{{ entry.location.name }}" required></td>
+        <td>Local</td>
+        <td>
+          <input type="text" name="path" form="edit-loc-{{ entry.location.id }}" value="{{ entry.location.path }}" required style="width: 100%;">
+          {% if not entry.exists %}<span class="warn">not found</span>{% endif %}
+        </td>
+        <td><button type="submit" form="edit-loc-{{ entry.location.id }}">Save</button></td>
+        <td>
+          {% if entry.location.is_backup_target %}
+            <span class="status-pill status-done">backup target</span>
+            <form method="post" action="/settings/storage-locations/{{ entry.location.id }}/unset-backup">
+              <button type="submit">Unset</button>
+            </form>
+          {% else %}
+            <form method="post" action="/settings/storage-locations/{{ entry.location.id }}/set-backup">
+              <button type="submit">Use as backup</button>
+            </form>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post" action="/settings/storage-locations/{{ entry.location.id }}/delete"
+                onsubmit="return confirm('Remove &quot;{{ entry.location.name }}&quot; and its cataloged files?');">
+            <button type="submit" class="danger-btn">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">No storage locations configured yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% for entry in storage_locations %}
+    <form id="edit-loc-{{ entry.location.id }}" method="post" action="/settings/storage-locations/{{ entry.location.id }}/update" hidden></form>
+  {% endfor %}
+
+  <h3>Add a storage location</h3>
+  <form class="toolbar" method="post" action="/settings/storage-locations">
+    <input type="text" name="name" placeholder="Name (e.g. Movies)" required>
+    <input type="text" name="path" placeholder="Path (e.g. /mediafiles/Movies)" required style="min-width: 22rem;">
+    <select disabled title="Remote storage is not supported yet">
+      <option>Local</option>
+      <option disabled>Remote (coming soon)</option>
+    </select>
+    <button type="submit">Add</button>
+  </form>
+
+  <h2 style="margin-top: 2rem;">Jellyfin integration</h2>
+  <p class="meta">
+    Movie details (title, plot, year, IMDb/TMDb IDs) are already picked up automatically from <code>.nfo</code> sidecar files during a scan.
+    Connect to Jellyfin below to also pull per-user watch status.
+  </p>
+
+  <form class="toolbar" method="post" action="/settings/jellyfin" style="flex-wrap: wrap;">
+    <input type="text" name="server_url" placeholder="http://jellyfin:8096" required
+           value="{{ jellyfin_config.server_url if jellyfin_config else '' }}" style="min-width: 16rem;">
+    <input type="password" name="api_key" placeholder="API key" required
+           value="{{ jellyfin_config.api_key if jellyfin_config else '' }}" style="min-width: 16rem;">
+    <button type="submit">Save</button>
+  </form>
+
+  {% if jellyfin_config %}
+  <form class="toolbar" method="post" action="/settings/jellyfin/test">
+    <button type="submit">Test connection</button>
+  </form>
+  <form method="post" action="/settings/jellyfin/delete"
+        onsubmit="return confirm('Remove the saved Jellyfin connection?');">
+    <button type="submit" class="danger-btn">Remove connection</button>
+  </form>
+
+  <h3 style="margin-top: 1.5rem;">Sync watch status</h3>
+  <p class="meta">
+    Jellyfin tracks watch status per user. Pick which Jellyfin account's watch data to pull into the catalog,
+    and confirm how each server maps a file's path (both containers mount the same folder, just at different paths).
+  </p>
+
+  {% if jellyfin_users %}
+  <form class="toolbar" method="post" action="/settings/jellyfin/sync-user" style="flex-wrap: wrap;">
+    <select name="sync_user_id" required onchange="this.form.sync_user_name.value = this.options[this.selectedIndex].text">
+      <option value="">Select a user...</option>
+      {% for u in jellyfin_users %}
+        <option value="{{ u.id }}" {% if jellyfin_config.sync_user_id == u.id %}selected{% endif %}>{{ u.name }}</option>
+      {% endfor %}
+    </select>
+    <input type="hidden" name="sync_user_name" value="{{ jellyfin_config.sync_user_name or '' }}">
+    <input type="text" name="path_prefix_from" value="{{ jellyfin_config.path_prefix_from }}" title="Jellyfin's path prefix" style="width: 8rem;">
+    <span>&rarr;</span>
+    <input type="text" name="path_prefix_to" value="{{ jellyfin_config.path_prefix_to }}" title="MediaBridge's path prefix" style="width: 8rem;">
+    <button type="submit">Save</button>
+  </form>
+  {% elif jellyfin_config %}
+  <p class="warn">Could not load Jellyfin users - check the connection above.</p>
+  {% endif %}
+
+  {% if jellyfin_config.sync_user_id %}
+  <p class="meta">Currently syncing watch status as <strong>{{ jellyfin_config.sync_user_name }}</strong>. {{ watched_count }} movie(s) marked watched.</p>
+  <form class="toolbar" method="post" action="/settings/jellyfin/sync">
+    <button class="scan-btn" type="submit">Sync watch status now</button>
+  </form>
+  {% endif %}
+  {% endif %}
+
+  <h2 style="margin-top: 2rem;">Catalog</h2>
+  <dl class="settings">
+    <dt>Recognized video extensions</dt>
+    <dd>{{ video_extensions }}</dd>
+
+    <dt>Database</dt>
+    <dd><code>{{ database_host }}</code></dd>
+
+    <dt>Cataloged movies</dt>
+    <dd>{{ movie_count }}</dd>
+
+    <dt>Last scan</dt>
+    <dd>{{ last_scanned_at or "never" }}</dd>
+  </dl>
+
+  <form class="toolbar" method="post" action="/scan-and-redirect">
+    <button class="scan-btn" type="submit">Rescan library</button>
+  </form>
+
+  <h2 style="margin-top: 2rem;">Service control</h2>
+  <p class="meta">
+    Restarts the copy-workflow worker pools via Terminator's internal API (no other service touches the Docker socket directly).
+    Broader task monitoring is available in <a href="http://localhost:5555" target="_blank" rel="noopener">Flower</a>.
+  </p>
+  <form class="toolbar" method="post" action="/settings/services/celery/restart">
+    <button type="submit">Restart general worker (celery)</button>
+  </form>
+  <form class="toolbar" method="post" action="/settings/services/worker/restart">
+    <button type="submit">Restart copy worker</button>
+  </form>
+{% endblock %}
