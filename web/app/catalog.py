@@ -13,7 +13,10 @@ from app.nfo import parse_nfo
 
 def scan_library(db: Session) -> dict:
     totals = {"found": 0, "added": 0, "updated": 0}
-    locations = db.query(StorageLocation).filter_by(location_type="local").all()
+    # The backup target holds copies of files already cataloged from their real
+    # location, not a source library - scanning it would catalog those copies as
+    # unrelated duplicate entries.
+    locations = db.query(StorageLocation).filter_by(location_type="local", is_backup_target=False).all()
     for location in locations:
         for key, value in _scan_location(db, location).items():
             totals[key] += value

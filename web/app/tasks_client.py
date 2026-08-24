@@ -18,3 +18,8 @@ def enqueue_copy_job(job_id: int) -> str:
 def enqueue_verify_job(job_id: int) -> str:
     result = celery_client.send_task("verify_copy_job", args=[job_id], queue="copy")
     return result.id
+
+
+def enqueue_clump_backup(job_ids: list[int]) -> str:
+    result = celery_client.send_task("backup_clump", args=[job_ids], queue="copy")
+    return result.id

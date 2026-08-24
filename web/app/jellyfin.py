@@ -1,9 +1,12 @@
+import threading
 import time
+from typing import Callable
 
 import httpx
 
-_users_cache: dict[str, tuple[float, list[dict]]] = {}
-USERS_CACHE_TTL_SECONDS = 300
+_cache: dict[str, tuple[float, list[dict]]] = {}
+_refresh_locks: dict[str, threading.Lock] = {}
+CACHE_TTL_SECONDS = 300
 
 
 def test_connection(server_url: str, api_key: str) -> dict:
@@ -31,22 +34,51 @@ def list_users(server_url: str, api_key: str) -> list[dict]:
     return [{"id": u["Id"], "name": u["Name"]} for u in response.json()]
 
 
-def list_users_cached(server_url: str, api_key: str) -> list[dict]:
-    """Same as list_users, but reuses a result younger than USERS_CACHE_TTL_SECONDS.
+def _cached(cache_key: str, fetch: Callable[[], list[dict]]) -> list[dict]:
+    """Serves the cached result for cache_key immediately (even if stale), and
+    refreshes it on a background thread once it's older than CACHE_TTL_SECONDS.
 
-    The Settings page calls this on every load - Jellyfin's /Users endpoint is
-    a real network round trip (slow, and unnecessary since the user list rarely
-    changes), so without caching every Settings page view pays that cost.
+    The Settings page calls list_users_cached/list_libraries_cached on every
+    load. On this deployment, DNS resolution for the Jellyfin hostname alone
+    takes several seconds (a property of the network, not of Jellyfin or
+    httpx), so blocking page render directly on these calls made every
+    Settings page view slow. This data rarely changes, so it's fine for it to
+    be briefly stale while a refresh happens in the background - only the very
+    first call ever for a given cache_key (nothing cached yet) still blocks,
+    since there's nothing to serve.
     """
-    key = f"{server_url}|{api_key}"
     now = time.monotonic()
-    cached = _users_cache.get(key)
-    if cached and now - cached[0] < USERS_CACHE_TTL_SECONDS:
-        return cached[1]
+    cached = _cache.get(cache_key)
 
-    users = list_users(server_url, api_key)
-    _users_cache[key] = (now, users)
-    return users
+    if cached is None:
+        value = fetch()
+        _cache[cache_key] = (now, value)
+        return value
+
+    age, value = now - cached[0], cached[1]
+    if age >= CACHE_TTL_SECONDS:
+        _refresh_in_background(cache_key, fetch)
+    return value
+
+
+def _refresh_in_background(cache_key: str, fetch: Callable[[], list[dict]]) -> None:
+    lock = _refresh_locks.setdefault(cache_key, threading.Lock())
+    if not lock.acquire(blocking=False):
+        return  # a refresh for this cache_key is already in flight
+
+    def _run() -> None:
+        try:
+            _cache[cache_key] = (time.monotonic(), fetch())
+        except httpx.HTTPError:
+            pass  # keep serving the stale cache; the next call will retry
+        finally:
+            lock.release()
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def list_users_cached(server_url: str, api_key: str) -> list[dict]:
+    return _cached(f"users|{server_url}|{api_key}", lambda: list_users(server_url, api_key))
 
 
 def list_libraries(server_url: str, api_key: str) -> list[dict]:
@@ -57,6 +89,10 @@ def list_libraries(server_url: str, api_key: str) -> list[dict]:
         {"name": f["Name"], "locations": f.get("Locations", [])}
         for f in response.json()
     ]
+
+
+def list_libraries_cached(server_url: str, api_key: str) -> list[dict]:
+    return _cached(f"libraries|{server_url}|{api_key}", lambda: list_libraries(server_url, api_key))
 
 
 def fetch_movie_watch_data(server_url: str, api_key: str, user_id: str) -> list[dict]:

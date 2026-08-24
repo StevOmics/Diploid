@@ -19,7 +19,7 @@ services:
       - "8765:8000"
     volumes:
       - /mnt/homedrive/mediafiles:/mediafiles:ro
-      - ./data/backup:/data/backup:ro
+      - /mnt/backup/mediabridge:/data/backup:ro
     depends_on:
       db:
         condition: service_healthy
@@ -37,6 +37,17 @@ services:
       rabbitmq:
         condition: service_healthy
       db:
+        condition: service_healthy
+
+  # Schedules retry_failed_transfers (see worker/app/celery_app.py's beat_schedule)
+  # onto the "default" queue every few minutes; celery/worker actually run it.
+  celery-beat:
+    build: ./worker
+    command: ["celery", "-A", "app.celery_app", "beat", "--loglevel=info"]
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      rabbitmq:
         condition: service_healthy
 
   rabbitmq:
@@ -60,7 +71,7 @@ services:
     env_file: .env
     volumes:
       - /mnt/homedrive/mediafiles:/mediafiles:rw
-      - ./data/backup:/data/backup:rw
+      - /mnt/backup/mediabridge:/data/backup:rw
     depends_on:
       rabbitmq:
         condition: service_healthy

@@ -20,6 +20,7 @@
         <td>{{ destination.name }}</td>
         <td><span class="status-pill status-{{ job.status }}">{{ job.status }}</span>
           {% if job.status == 'failed' and job.error_message %}<div class="warn">{{ job.error_message }}</div>{% endif %}
+          {% if job.status == 'failed' and job.next_retry_at %}<div class="meta">Will retry at {{ job.next_retry_at }}</div>{% endif %}
         </td>
         <td>
           {% if job.total_bytes %}

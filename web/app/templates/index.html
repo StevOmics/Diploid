@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %} - Movie Catalog{% endblock %}
+{% block title %} - Media Catalog{% endblock %}
 {% block content %}
-  <h1>Movie Catalog</h1>
+  <h1>Media Catalog</h1>
   {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
   {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
   <p class="meta">{{ movies|length }} movie(s) cataloged{% if library %} in "{{ library }}"{% endif %}{% if genre %} / "{{ genre }}"{% endif %}{% if q %} matching "{{ q }}"{% endif %}</p>
@@ -37,63 +37,95 @@
               onclick="return confirm('Restore will overwrite the current file at its original location with the backup copy. Continue?');">Restore</button>
       <button type="submit" formaction="/movies/bulk-verify" class="mini-btn">Verify</button>
     {% else %}
-      <span class="warn">Set a backup location in Settings to enable Backup/Restore/Verify</span>
+      <span class="warn">Set a local backup location on the <a href="/libraries">Libraries</a> page to enable Backup/Restore/Verify</span>
+    {% endif %}
+    {% if cloud_backup_location %}
+      <span style="color: #ccc;">|</span>
+      <button type="submit" formaction="/movies/bulk-backup-cloud" class="mini-btn">Backup to Cloud Archive</button>
     {% endif %}
   </form>
 
   <div style="overflow-x: auto;">
   <table>
     <thead>
-      <tr><th></th><th>Title</th><th>Rating</th><th>Library / Genre</th><th>Size</th><th>Actions</th></tr>
+      <tr><th></th><th>ID</th><th>Title</th><th>Locations</th><th>Rating</th><th>Library / Genre</th><th>Size</th><th>Actions</th></tr>
     </thead>
     <tbody>
       {% for m in movies %}
       {% set job = backup_jobs.get(m.id) %}
       {% set has_backup = job and job.status == 'done' %}
+      {% set cloud_job = cloud_backup_jobs.get(m.id) %}
+      {% set has_cloud_backup = cloud_job and cloud_job.status == 'done' %}
+      {% set source_location = storage_location_by_id.get(m.storage_location_id) %}
       <tr>
         <td><input type="checkbox" name="media_file_ids" value="{{ m.id }}" form="bulk-actions-form" {% if select_all %}checked{% endif %}></td>
+        <td><code style="font-size: 0.8rem;">{{ m.id }}</code></td>
         <td>
           {% if m.watched %}&#10003; {% endif %}{{ m.title or m.filename }}{% if m.year %} ({{ m.year }}){% endif %}
           <br><code style="font-size: 0.75rem; color: #666;" title="fingerprint: {{ m.fingerprint or 'n/a' }}&#10;uuid: {{ m.uuid }}">{{ m.path }}</code>
         </td>
-        <td>{{ "%.1f"|format(m.rating) if m.rating else "-" }}</td>
-        <td>{{ [m.jellyfin_library, m.genre] | select | join(' / ') or "-" }}</td>
-        <td>{{ "%.1f"|format(m.size_bytes / 1048576) }} MB</td>
         <td>
-          <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
-            <form method="post" action="/movies/{{ m.id }}/backup" style="display: inline;">
-              <button type="submit" class="mini-btn" {% if not backup_location or m.storage_location_id == backup_location.id %}disabled{% endif %}>Backup</button>
-            </form>
-            <form method="post" action="/movies/{{ m.id }}/restore" style="display: inline;"
-                  onsubmit="return confirm('Restore will overwrite the current file at its original location with the backup copy. Continue?');">
-              <button type="submit" class="mini-btn" {% if not has_backup %}disabled{% endif %}>Restore</button>
-            </form>
-            <form method="post" action="/movies/{{ m.id }}/verify" style="display: inline;">
-              <button type="submit" class="mini-btn" {% if not has_backup %}disabled{% endif %}>Verify</button>
-            </form>
-          </div>
-          <div style="margin-top: 0.25rem;">
-            {% if not backup_location %}
-              <span class="warn">no backup location set</span>
-            {% elif job and job.status == 'done' %}
-              <span class="status-pill status-done">backed up</span>
-              {% if job.verify_status == 'match' %}
-                <span class="status-pill status-done" title="verified {{ job.verified_at }}">verified</span>
-              {% elif job.verify_status == 'mismatch' %}
-                <span class="status-pill status-failed" title="verified {{ job.verified_at }}">mismatch</span>
-              {% elif job.verify_status == 'missing' %}
-                <span class="status-pill status-failed" title="verified {{ job.verified_at }}">backup missing</span>
+          <div>{{ source_location.name if source_location else "unknown" }}</div>
+          {% for loc_job in file_locations.get(m.id, []) %}
+          <div style="margin-left: 1rem; font-size: 0.8rem; color: #666;">
+            &#8627; {{ storage_location_by_id[loc_job.destination_storage_location_id].name if loc_job.destination_storage_location_id in storage_location_by_id else "unknown" }}
+            {% if loc_job.status == 'done' %}
+              <span class="status-pill status-done">backed up</span>{% if loc_job.encrypted %} &#128274;{% endif %}
+              {% if loc_job.verify_status == 'match' %}
+                <span class="status-pill status-done" title="verified {{ loc_job.verified_at }}">verified</span>
+              {% elif loc_job.verify_status == 'mismatch' %}
+                <span class="status-pill status-failed" title="verified {{ loc_job.verified_at }}">mismatch</span>
+              {% elif loc_job.verify_status == 'missing' %}
+                <span class="status-pill status-failed" title="verified {{ loc_job.verified_at }}">missing</span>
               {% endif %}
-              <br><code style="font-size: 0.7rem;">{{ job.destination_path }}</code>
-            {% elif job and job.status in ('pending', 'running') %}
-              <span class="status-pill status-running">{{ job.status }}</span>
-              {% if job.total_bytes %}({{ "%.0f"|format(job.progress_bytes / job.total_bytes * 100) }}%){% endif %}
-            {% elif job and job.status == 'failed' %}
-              <span class="status-pill status-failed">failed</span>
-            {% elif m.storage_location_id == backup_location.id %}
-              <span class="warn">is backup location</span>
+            {% elif loc_job.status in ('pending', 'running') %}
+              <span class="status-pill status-running">{{ loc_job.status }}</span>
+              {% if loc_job.total_bytes %}({{ "%.0f"|format(loc_job.progress_bytes / loc_job.total_bytes * 100) }}%){% endif %}
+            {% elif loc_job.status == 'failed' %}
+              <span class="status-pill status-failed" title="{{ loc_job.error_message }}">failed</span>
             {% endif %}
           </div>
+          {% endfor %}
+        </td>
+        <td>{{ "%.1f"|format(m.rating) if m.rating else "-" }}</td>
+        <td>{{ [source_location.name if source_location else none, m.genre] | select | join(' / ') or "-" }}</td>
+        <td>{{ "%.1f"|format(m.size_bytes / 1048576) }} MB</td>
+        <td>
+          <div class="action-group">
+            <span class="action-group-label">Local</span>
+            <div class="action-grid">
+              <form method="post" action="/movies/{{ m.id }}/backup">
+                <button type="submit" class="mini-btn" {% if not backup_location or m.storage_location_id == backup_location.id %}disabled{% endif %}>Backup</button>
+              </form>
+              <form method="post" action="/movies/{{ m.id }}/restore"
+                    onsubmit="return confirm('Restore will overwrite the current file at its original location with the backup copy. Continue?');">
+                <button type="submit" class="mini-btn" {% if not has_backup %}disabled{% endif %}>Restore</button>
+              </form>
+              <form method="post" action="/movies/{{ m.id }}/verify">
+                <button type="submit" class="mini-btn" {% if not has_backup %}disabled{% endif %}>Verify</button>
+              </form>
+            </div>
+          </div>
+          {% if cloud_backup_location %}
+            <div class="action-group">
+              <span class="action-group-label">Cloud</span>
+              <div class="action-grid">
+                <form method="post" action="/movies/{{ m.id }}/backup-cloud">
+                  <button type="submit" class="mini-btn" {% if m.storage_location_id == cloud_backup_location.id %}disabled{% endif %}>Backup</button>
+                </form>
+                <form method="post" action="/movies/{{ m.id }}/restore-cloud"
+                      onsubmit="return confirm('Restore will overwrite the current file at its original location with the cloud backup copy. Continue?');">
+                  <button type="submit" class="mini-btn" {% if not has_cloud_backup %}disabled{% endif %}>Restore</button>
+                </form>
+                <form method="post" action="/movies/{{ m.id }}/verify-cloud">
+                  <button type="submit" class="mini-btn" {% if not has_cloud_backup %}disabled{% endif %}>Verify</button>
+                </form>
+              </div>
+            </div>
+          {% endif %}
+          {% if not backup_location and not cloud_backup_location %}
+            <span class="warn">no backup location set</span>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

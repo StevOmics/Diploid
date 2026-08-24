@@ -9,3 +9,4 @@ itsdangerous==2.2.0
 python-multipart==0.0.20
 httpx==0.28.1
 celery==5.4.0
+google-cloud-storage==2.18.2

@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://mediabridge:mediabridge@db:5432/mediabridge"
     movies_root: str = "/mediafiles/Movies"
+    media_root: str = "/mediafiles"
     secret_key: str = "dev-only-insecure-secret-key"
     rabbitmq_default_user: str = "mediabridge"
     rabbitmq_default_pass: str = "mediabridge"

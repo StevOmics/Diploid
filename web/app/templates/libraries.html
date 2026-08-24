@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %} - Libraries{% endblock %}
+{% block content %}
+  <h1>Libraries</h1>
+
+  {% if error %}<p class="error-banner">{{ error }}</p>{% endif %}
+  {% if flash_status == 'ok' %}<p class="success-banner">{{ flash_message }}</p>{% endif %}
+  {% if flash_status == 'error' %}<p class="error-banner">{{ flash_message }}</p>{% endif %}
+
+  <p class="meta">
+    Local backup and the cloud archive are independent - either or both can be active at once. To add, edit, or
+    remove libraries themselves, see <a href="/settings">Settings</a>.
+  </p>
+
+  <h2>Backup targets</h2>
+  <div style="display: flex; gap: 4rem; flex-wrap: wrap;">
+    <div>
+      <h3 style="margin-top: 0;">Local backup location</h3>
+      {% if backup_location %}
+        <p class="meta">
+          <span class="status-pill status-done">active</span>
+          <strong>{{ backup_location.name }}</strong> &mdash; <code>{{ backup_location.path }}</code>
+          {% if not backup_location_exists %}<span class="warn">not found</span>{% endif %}
+        </p>
+        <form method="post" action="/settings/storage-locations/{{ backup_location.id }}/unset-backup">
+          <button type="submit">Unset local backup location</button>
+        </form>
+      {% elif local_target_candidates %}
+        <p class="meta">No local backup location set. Choose one:</p>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          {% for loc in local_target_candidates %}
+          <form method="post" action="/settings/storage-locations/{{ loc.id }}/set-backup">
+            <button type="submit" class="mini-btn">{{ loc.name }}</button>
+          </form>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="warn">No local storage locations configured yet - add one in <a href="/settings">Settings</a> first.</p>
+      {% endif %}
+    </div>
+
+    <div>
+      <h3 style="margin-top: 0;">Cloud archive</h3>
+      {% if cloud_backup_location %}
+        <p class="meta">
+          <span class="status-pill status-done">active</span>
+          Google Cloud Storage bucket <strong>{{ cloud_storage_config.bucket_name }}</strong>
+        </p>
+        <form method="post" action="/settings/cloud-storage/unset-backup">
+          <button type="submit">Unset cloud archive</button>
+        </form>
+      {% elif cloud_storage_config and cloud_storage_config.connected %}
+        <p class="meta">Connected bucket: <strong>{{ cloud_storage_config.bucket_name }}</strong></p>
+        <form method="post" action="/settings/cloud-storage/set-backup">
+          <button type="submit">Use as cloud archive</button>
+        </form>
+      {% else %}
+        <p class="warn">No Google Cloud Storage bucket connected - connect one in <a href="/settings">Settings</a> first.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <h2 style="margin-top: 2rem;">Libraries</h2>
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Path</th><th>Local backup</th><th>Cloud archive</th></tr>
+    </thead>
+    <tbody>
+      {% for entry in library_rows %}
+      <tr>
+        <td>{{ entry.location.name }}</td>
+        <td><code>{{ entry.location.path }}</code></td>
+        <td>
+          {% if backup_location %}
+            {% if entry.total %}
+              <span class="status-pill {% if entry.local_backed_up == entry.total %}status-done{% else %}status-running{% endif %}">
+                {{ entry.local_backed_up }}/{{ entry.total }} backed up
+              </span>
+            {% endif %}
+            <form method="post" action="/settings/storage-locations/{{ entry.location.id }}/backup-local">
+              <button type="submit" class="mini-btn" {% if not entry.total %}disabled{% endif %}>Backup to Local</button>
+            </form>
+          {% else %}
+            <span class="warn">no local target set</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if cloud_backup_location %}
+            {% if entry.total %}
+              <span class="status-pill {% if entry.cloud_backed_up == entry.total %}status-done{% else %}status-running{% endif %}">
+                {{ entry.cloud_backed_up }}/{{ entry.total }} backed up
+              </span>
+            {% endif %}
+            <form method="post" action="/settings/storage-locations/{{ entry.location.id }}/backup-cloud">
+              <button type="submit" class="mini-btn" {% if not entry.total %}disabled{% endif %}>Backup to Cloud Archive</button>
+            </form>
+          {% else %}
+            <span class="warn">no cloud archive set</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">No libraries configured yet. Add one in <a href="/settings">Settings</a>.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
