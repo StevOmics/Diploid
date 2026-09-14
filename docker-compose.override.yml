@@ -1,0 +1,13 @@
+# Local dev overrides (macOS): the base compose file bind-mounts Linux host
+# paths (/mnt/homedrive/mediafiles, /mnt/backup/mediabridge) that don't exist
+# here. Point them at ./data/* instead. Compose merges these by mount target.
+services:
+  web:
+    volumes:
+      - ./data/mediafiles:/mediafiles:ro
+      - ./data/backup:/data/backup:ro
+
+  worker:
+    volumes:
+      - ./data/mediafiles:/mediafiles:rw
+      - ./data/backup:/data/backup:rw

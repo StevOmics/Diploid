@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %} - Copy Jobs{% endblock %}
+{% block content %}
+  <h1>Copy Jobs</h1>
+  {% if message %}<p class="success-banner">{{ message }}</p>{% endif %}
+  <p class="meta">
+    {{ jobs|length }} job(s). Refresh this page to see progress -
+    deeper task internals are on <a href="http://localhost:5555" target="_blank" rel="noopener">Flower</a>.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>File</th><th>Type</th><th>Location</th><th>Status</th><th>Progress</th><th>Verify</th><th>Requested</th></tr>
+    </thead>
+    <tbody>
+      {% for job, media_file, destination in jobs %}
+      <tr>
+        <td>{{ media_file.title or media_file.filename }}</td>
+        <td>{{ job.job_type | capitalize }}</td>
+        <td>{{ destination.name }}</td>
+        <td><span class="status-pill status-{{ job.status }}">{{ job.status }}</span>
+          {% if job.status == 'failed' and job.error_message %}<div class="warn">{{ job.error_message }}</div>{% endif %}
+          {% if job.status == 'failed' and job.next_retry_at %}<div class="meta">Will retry at {{ job.next_retry_at }}</div>{% endif %}
+        </td>
+        <td>
+          {% if job.total_bytes %}
+            <progress value="{{ job.progress_bytes }}" max="{{ job.total_bytes }}"></progress>
+            {{ "%.0f"|format(job.progress_bytes / job.total_bytes * 100) }}%
+          {% else %}
+            -
+          {% endif %}
+        </td>
+        <td>
+          {% if job.verify_status == 'match' %}<span class="status-pill status-done">match</span>
+          {% elif job.verify_status == 'mismatch' %}<span class="status-pill status-failed">mismatch</span>
+          {% elif job.verify_status == 'missing' %}<span class="status-pill status-failed">missing</span>
+          {% else %}-{% endif %}
+        </td>
+        <td>{{ job.created_at }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7">No copy jobs yet - use the Backup/Restore actions on the Catalog page.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
