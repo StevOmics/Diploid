@@ -112,6 +112,18 @@ Per git log, the app has one substantial commit ("Build MediaBridge: catalog, au
 - **Before accepting outside contributions**, this needs a CLA (or equivalent contributor-license terms) — without one, external contributors retain copyright on their own patches and Steve can't legally relicense those pieces commercially. `CONTRIBUTING.md` now covers this with an inline contributor-license clause (PRs are submitted under a grant that lets the project owner relicense them too).
 - A sensitive-data audit of the full git history (2026-09-14) found nothing to scrub: `.env` was never committed, no hardcoded secrets exist anywhere in tracked source (everything routes through env vars / DB config), and no key/credential files ever entered history. Decision made to squash history into a single "Initial public release" commit for the public fork rather than reusing the private dev history verbatim (purely for a cleaner external-facing log, not because of any leaked data).
 
+### Branch model: private dev repo + public mirror
+
+This directory is the private `MediaBridge` repo (`origin`, private) *and* tracks the public `Diploid` repo (`public-origin`) in the same working tree, via two branches:
+
+- **`main`** — day-to-day development, pushed to `origin` (private). Can contain WIP and anything not ready for public release. This is also where `internal/` lives.
+- **`public-release`** — mirrors what's actually live on Diploid. Only moves forward by merging reviewed work in from `main`; pushing this branch to `public-origin` is the actual "release" action. Its own `.gitignore` also excludes `/internal/` as a second layer of defense.
+- **`internal/`** — private, pre-release work (and eventually any commercial/enterprise-only code) that must never reach Diploid. Only exists on `main`. See `internal/README.md`.
+
+To publish: run `scripts/publish-to-diploid.sh`. It merges `main` into `public-release`, hard-strips `internal/` from the result regardless of what `main` did to it, commits, and pushes to `public-origin`. Because both branches share history (merged 2026-09-14 via `--allow-unrelated-histories`, since `public-release` started life as a squashed orphan commit), this is now a normal incremental merge each time — no more from-scratch squashing.
+
+If Diploid ever takes outside PRs, merge them into `public-release`, then merge `public-release` back into `main` to keep the two in sync (safe in that direction, since public content is by definition not sensitive).
+
 ---
 
 **Project Owner**: Steve Ayers
