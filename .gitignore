@@ -219,3 +219,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Private pre-release work - must never reach the public repo
+# (scripts/publish-to-diploid.sh also strips it explicitly from every sync)
+/internal/
